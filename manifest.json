@@ -2,39 +2,51 @@
   "name": "JobRadar – Job Hunt Dashboard",
   "short_name": "JobRadar",
   "description": "Smart job hunt dashboard powered by your CV",
-  "start_url": "/",
+  "start_url": "/job-radar/",
+  "scope": "/job-radar/",
   "display": "standalone",
   "background_color": "#0A0F1E",
   "theme_color": "#0A0F1E",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "/job-radar/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "/job-radar/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/job-radar/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/job-radar/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["productivity", "utilities"],
-  "screenshots": [],
   "shortcuts": [
     {
       "name": "Search Naukri",
       "short_name": "Naukri",
       "description": "Quick search on Naukri",
-      "url": "/?tab=naukri"
+      "url": "/job-radar/?tab=naukri"
     },
     {
       "name": "Search LinkedIn",
       "short_name": "LinkedIn",
       "description": "Quick search on LinkedIn",
-      "url": "/?tab=linkedin"
+      "url": "/job-radar/?tab=linkedin"
     }
   ]
 }
