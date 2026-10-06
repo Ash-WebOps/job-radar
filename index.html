@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JobRadar – Smart Job Hunt Dashboard</title>
+  <meta name="description" content="Your personal job hunt dashboard powered by your CV" />
+  <meta name="theme-color" content="#0A0F1E" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- ════════════════════════════════════════════════════
+       🔧 STEP 1: PASTE YOUR FIREBASE CONFIG BELOW
+       Firebase Console → Project Settings → Your Apps → Web
+       ════════════════════════════════════════════════════ -->
+  <script type="module">
+    import { initializeApp }         from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, remove, onValue }
+                                     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey:            "PASTE_YOUR_API_KEY",
+      authDomain:        "PASTE_YOUR_AUTH_DOMAIN",
+      databaseURL:       "PASTE_YOUR_DATABASE_URL",
+      projectId:         "PASTE_YOUR_PROJECT_ID",
+      storageBucket:     "PASTE_YOUR_STORAGE_BUCKET",
+      messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
+      appId:             "PASTE_YOUR_APP_ID"
+    };
+
+    // Detect if user has pasted real config yet
+    const configured = !Object.values(firebaseConfig).some(v => v.startsWith('PASTE_'));
+    window._fbConfigured = configured;
+
+    if (configured) {
+      try {
+        const app = initializeApp(firebaseConfig);
+        const db  = getDatabase(app);
+        window._db    = db;
+        window._dbRef = ref;
+        window._dbSet = set;
+        window._dbRem = remove;
+        window._dbOn  = onValue;
+      } catch(e) {
+        window._fbConfigured = false;
+        console.warn('Firebase init error:', e);
+      }
+    }
+    document.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
+  <style>
+    :root {
+      --bg:       #0A0F1E;
+      --surface:  #111827;
+      --surface2: #1A2235;
+      --border:   #1F2D45;
+      --accent:   #3B82F6;
+      --accent2:  #60A5FA;
+      --naukri:   #FF6B35;
+      --linkedin: #0A66C2;
+      --success:  #22C55E;
+      --warning:  #F59E0B;
+      --danger:   #EF4444;
+      --text:     #F1F5F9;
+      --muted:    #64748B;
+      --subtle:   #94A3B8;
+      --radius:   12px;
+      --font:     'Space Grotesk', sans-serif;
+      --mono:     'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 20px; background: var(--surface);
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 700; letter-spacing: -.3px; }
+    .logo-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .sync-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .68rem; font-family: var(--mono);
+      padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);
+      color: var(--muted); transition: all .4s;
+    }
+    .sync-pill.ok    { border-color: rgba(34,197,94,.45); color: var(--success); background: rgba(34,197,94,.07); }
+    .sync-pill.busy  { border-color: rgba(59,130,246,.45); color: var(--accent2); }
+    .sync-pill.err   { border-color: rgba(239,68,68,.45);  color: var(--danger); }
+    .sync-pip { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .sync-pip.spin { animation: blink .7s infinite; }
+
+    .btn-top {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--subtle);
+      border-radius: 8px; padding: 6px 12px; font-size: .76rem; font-family: var(--font);
+      cursor: pointer; transition: all .2s;
+    }
+    .btn-top:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width: 860px; margin: 0 auto; padding: 18px 16px 90px; }
+
+    /* ── ALERT BANNER ── */
+    .alert {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 14px 18px; border-radius: var(--radius); margin-bottom: 18px;
+      border: 1px solid rgba(245,158,11,.35); background: rgba(245,158,11,.06);
+    }
+    .alert.hidden { display: none; }
+    .alert-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .alert-body h4 { font-size: .82rem; color: var(--warning); margin-bottom: 3px; }
+    .alert-body p  { font-size: .76rem; color: var(--subtle); line-height: 1.6; }
+    .alert-body a  { color: var(--accent2); text-decoration: none; }
+    .alert-body a:hover { text-decoration: underline; }
+    .alert-body code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: .72rem; }
+
+    /* ── STATS ROW ── */
+    .stats-row { display: flex; gap: 10px; margin-bottom: 18px; }
+    .stat-card {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px;
+    }
+    .stat-val  { font-size: 1.5rem; font-weight: 700; line-height: 1; margin-bottom: 3px; }
+    .stat-lbl  { font-size: .68rem; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .stat-card.accent .stat-val { color: var(--accent2); }
+    .stat-card.warn   .stat-val { color: var(--warning); }
+    .stat-card.ok     .stat-val { color: var(--success); }
+
+    /* ── CV CARD ── */
+    .cv-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; margin-bottom: 18px;
+    }
+    .cv-card.loaded { border-color: var(--accent); }
+    .cv-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cv-label { font-size: .68rem; font-family: var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: 1.5px; }
+    .cv-fname { font-size: .76rem; color: var(--success); }
+
+    .dropzone {
+      border: 2px dashed var(--border); border-radius: 10px;
+      padding: 26px 16px; text-align: center; cursor: pointer; transition: all .2s;
+    }
+    .dropzone:hover, .dropzone.over { border-color: var(--accent); background: rgba(59,130,246,.04); }
+    .dropzone-icon { font-size: 2rem; margin-bottom: 6px; }
+    .dropzone p { color: var(--subtle); font-size: .85rem; }
+    .dropzone strong { color: var(--text); }
+    .dropzone small  { display:block; margin-top: 4px; font-size: .73rem; color: var(--muted); }
+    #cv-input { display: none; }
+
+    /* skills */
+    .skills-wrap { margin-top: 14px; display: none; }
+    .skills-hdr  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .skills-hdr span { font-size: .68rem; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .skills-hdr button { font-size: .7rem; color: var(--accent2); background: none; border: none; cursor: pointer; font-family: var(--mono); }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.3);
+      color: var(--accent2); padding: 3px 10px; border-radius: 20px;
+      font-size: .73rem; font-family: var(--mono); cursor: pointer; transition: all .2s; user-select: none;
+    }
+    .tag:hover  { background: rgba(59,130,246,.2); }
+    .tag.on     { background: rgba(59,130,246,.25); border-color: var(--accent); }
+    .tag.ping   { animation: tagPing .35s ease; }
+    @keyframes tagPing { 50%{ transform:scale(1.18); background:rgba(59,130,246,.4); } }
+
+    .cv-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn { padding: 7px 15px; border-radius: 8px; font-size: .8rem; font-family: var(--font); font-weight: 500; cursor: pointer; border: 1px solid var(--border); transition: all .2s; }
+    .btn-blue  { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-blue:hover { background: #2563EB; }
+    .btn-ghost { background: transparent; color: var(--subtle); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--subtle); }
+
+    /* ── FILTERS ── */
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+    .fchip {
+      padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--subtle); font-size: .73rem;
+      font-family: var(--mono); cursor: pointer; transition: all .2s;
+    }
+    .fchip.on    { border-color: var(--accent); color: var(--accent2); background: rgba(59,130,246,.08); }
+    .fchip:hover { border-color: var(--subtle); color: var(--text); }
+    .filter-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+
+    /* ── TABS ── */
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab {
+      flex: 1; padding: 13px 16px; border-radius: var(--radius);
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); font-family: var(--font); font-size: .9rem;
+      font-weight: 600; cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .tab.naukri.on   { background: rgba(255,107,53,.1); border-color: var(--naukri); color: var(--naukri); }
+    .tab.linkedin.on { background: rgba(10,102,194,.15); border-color: var(--linkedin); color: #60B3FF; }
+    .tab:not(.on):hover { border-color: var(--subtle); color: var(--text); }
+
+    /* ── SEARCH BAR ── */
+    .searchbar { display: flex; gap: 8px; margin-bottom: 16px; }
+    .searchbar input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 14px; color: var(--text);
+      font-family: var(--font); font-size: .875rem; outline: none; transition: border .2s;
+    }
+    .searchbar input:focus { border-color: var(--accent); }
+    .searchbar input::placeholder { color: var(--muted); }
+    .btn-search {
+      padding: 11px 20px; background: var(--accent); border: none; border-radius: 10px;
+      color: #fff; font-family: var(--font); font-weight: 600; font-size: .875rem;
+      cursor: pointer; transition: background .2s; white-space: nowrap;
+    }
+    .btn-search:hover { background: #2563EB; }
+
+    /* ── LAUNCH PANEL ── */
+    .launch-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 26px 20px; text-align: center; margin-bottom: 8px;
+    }
+    .launch-panel h3 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+    .launch-panel p  { color: var(--subtle); font-size: .83rem; margin-bottom: 18px; line-height: 1.65; }
+    .launch-btns { display: flex; flex-direction: column; gap: 10px; }
+    .launch-btn {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 15px 18px; border-radius: 10px; font-weight: 600;
+      font-size: .9rem; transition: all .2s; border: 1px solid transparent;
+      cursor: pointer; font-family: var(--font); width: 100%; text-decoration: none;
+    }
+    .launch-btn.naukri  { background: rgba(255,107,53,.12); color: var(--naukri); border-color: rgba(255,107,53,.3); }
+    .launch-btn.naukri:hover  { background: rgba(255,107,53,.22); }
+    .launch-btn.linkedin{ background: rgba(10,102,194,.12); color: #60B3FF; border-color: rgba(10,102,194,.35); }
+    .launch-btn.linkedin:hover{ background: rgba(10,102,194,.22); }
+    .launch-btn-left { display: flex; align-items: center; gap: 10px; }
+    .launch-sub { font-size: .72rem; font-weight: 400; opacity: .75; display: block; margin-top: 2px; font-family: var(--mono); }
+
+    /* ── APPLIED SECTION ── */
+    .applied-wrap {
+      margin-top: 24px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    }
+    .applied-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 18px; border-bottom: 1px solid var(--border); cursor: pointer;
+      user-select: none;
+    }
+    .applied-hdr-left { display: flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 600; }
+    .badge { background: var(--success); color: #fff; border-radius: 20px; padding: 2px 8px; font-size: .68rem; font-family: var(--mono); }
+    .applied-toggle { font-size: .76rem; color: var(--muted); }
+    .applied-body  { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+    .applied-body.collapsed { display: none; }
+
+    /* log form */
+    .log-form { background: var(--surface2); border: 1px dashed var(--border); border-radius: 10px; padding: 14px; }
+    .log-form p  { font-size: .78rem; color: var(--muted); margin-bottom: 10px; }
+    .log-fields  { display: flex; flex-wrap: wrap; gap: 7px; }
+    .log-fields input, .log-fields select {
+      flex: 1; min-width: 120px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 11px; color: var(--text); font-size: .8rem;
+      font-family: var(--font); outline: none;
+    }
+    .log-fields input:focus { border-color: var(--accent); }
+    .log-fields input::placeholder { color: var(--muted); }
+    .btn-log { padding: 8px 16px; background: var(--success); border: none; border-radius: 8px; color: #fff; font-family: var(--font); font-size: .8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .btn-log:hover { background: #16a34a; }
+
+    /* applied job rows */
+    .job-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px; background: var(--surface2);
+      border-radius: 9px; border-left: 3px solid var(--success);
+    }
+    .job-row-info { flex: 1; }
+    .job-row-info strong { display: block; font-size: .85rem; margin-bottom: 2px; }
+    .job-row-info span   { font-size: .72rem; color: var(--muted); font-family: var(--mono); }
+    .job-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
+    .job-row-timer  { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
+    .job-row-src    { font-size: .65rem; color: var(--muted); opacity: .7; font-family: var(--mono); }
+    .btn-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: .85rem; padding: 4px 6px; transition: color .2s; }
+    .btn-del:hover { color: var(--danger); }
+
+    .empty-msg { text-align: center; padding: 16px; color: var(--muted); font-size: .8rem; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 22px; left: 50%;
+      transform: translateX(-50%) translateY(90px);
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 9px 20px; border-radius: 24px; font-size: .83rem; font-weight: 500;
+      z-index: 999; transition: transform .3s cubic-bezier(.34,1.56,.64,1);
+      white-space: nowrap; box-shadow: 0 6px 28px rgba(0,0,0,.45); pointer-events: none;
+    }
+    .toast.up       { transform: translateX(-50%) translateY(0); }
+    .toast.is-ok    { border-color: rgba(34,197,94,.5); color: var(--success); }
+    .toast.is-warn  { border-color: rgba(245,158,11,.5); color: var(--warning); }
+
+    /* ── MISC ── */
+    .fade { animation: fade .3s ease; }
+    @keyframes fade { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+
+    @media(max-width:480px){
+      .stats-row { gap: 7px; }
+      .stat-val { font-size: 1.2rem; }
+      .topbar-right .btn-top { display: none; }
+      .sync-pill span { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<nav class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    JobRadar
+  </div>
+  <div class="topbar-right">
+    <div class="sync-pill" id="sync-pill">
+      <div class="sync-pip spin"></div>
+      <span id="sync-lbl">connecting…</span>
+    </div>
+    <button class="btn-top" onclick="openSkillEditor()">⚙ Skills</button>
+    <button class="btn-top" onclick="resetCV()">↺ CV</button>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ── FIREBASE ALERT ── -->
+  <div class="alert" id="fb-alert">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-body">
+      <h4>Firebase not configured — applied jobs are session-only (won't sync across devices)</h4>
+      <p>
+        Open <code>index.html</code>, find <code>firebaseConfig</code> at the top, and replace the 7 <code>PASTE_…</code> placeholders
+        with your real values from <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a>.
+        Full instructions in <code>README.md</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- ── STATS ROW ── -->
+  <div class="stats-row">
+    <div class="stat-card accent">
+      <div class="stat-val" id="stat-skills">0</div>
+      <div class="stat-lbl">Skills detected</div>
+    </div>
+    <div class="stat-card warn">
+      <div class="stat-val" id="stat-applied">0</div>
+      <div class="stat-lbl">Applied (24h)</div>
+    </div>
+    <div class="stat-card ok">
+      <div class="stat-val" id="stat-days">3d</div>
+      <div class="stat-lbl">Search window</div>
+    </div>
+  </div>
+
+  <!-- ── CV CARD ── -->
+  <div class="cv-card" id="cv-card">
+    <div class="cv-row">
+      <span class="cv-label">// Your CV</span>
+      <span class="cv-fname" id="cv-fname"></span>
+    </div>
+
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('cv-input').click()">
+      <div class="dropzone-icon">📄</div>
+      <p><strong>Drop your CV here</strong> or tap to upload</p>
+      <small>PDF or TXT · Skills saved on this device · Upload once</small>
+    </div>
+    <input type="file" id="cv-input" accept=".pdf,.txt,.doc,.docx" />
+
+    <div class="skills-wrap" id="skills-wrap">
+      <div class="skills-hdr">
+        <span>Detected skills — tap to toggle</span>
+        <button onclick="openSkillEditor()">+ Edit manually</button>
+      </div>
+      <div class="tags" id="tags"></div>
+      <div class="cv-btns">
+        <button class="btn btn-blue" onclick="doSearch()">🔍 Search with these skills</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('cv-input').click()">↑ Upload new CV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TABS ── -->
+  <div class="tabs">
+    <button class="tab naukri on"  id="tab-naukri"   onclick="setTab('naukri')">🟠 Naukri</button>
+    <button class="tab linkedin"   id="tab-linkedin"  onclick="setTab('linkedin')">🔵 LinkedIn</button>
+  </div>
+
+  <!-- ── SEARCH BAR ── -->
+  <div class="searchbar">
+    <input type="text" id="q" placeholder="e.g. DevOps AWS Terraform CI/CD" />
+    <button class="btn-search" onclick="doSearch()">Search Jobs ↗</button>
+  </div>
+
+  <!-- ── FILTERS ── -->
+  <div class="filters" id="filters">
+    <button class="fchip on"  onclick="setDays(3,this)">Past 3 days</button>
+    <button class="fchip"     onclick="setDays(7,this)">Past 7 days</button>
+    <button class="fchip"     onclick="setDays(14,this)">2 weeks</button>
+    <div class="filter-sep"></div>
+    <button class="fchip on"  data-exp="true"  onclick="toggleExp(this)">2–8 yrs exp</button>
+    <button class="fchip"     data-loc="true"  onclick="toggleLoc(this)">📍 India</button>
+  </div>
+
+  <!-- ── LAUNCH PANEL ── -->
+  <div class="launch-panel fade" id="launch-panel">
+    <h3>Ready to hunt 🎯</h3>
+    <p>Your skills are pre-loaded below. Hit a button to open Naukri or LinkedIn<br>
+       with filters already applied — just browse and apply.</p>
+    <div class="launch-btns" id="launch-btns">
+      <button class="launch-btn naukri" onclick="openNaukri()">
+        <div class="launch-btn-left">
+          <span>🟠</span>
+          <div style="text-align:left">
+            Open Naukri Jobs
+            <span class="launch-sub" id="naukri-preview">loading skills…</span>
+          </div>
+        </div>
+        <span>↗</span>
+      </button>
+      <button class="launch-btn linkedin" onclick="openLinkedIn()">
+        <div class="launch-btn-left">
+          <span>🔵</span>
+          <div style="text-align:left">
+            Open LinkedIn Jobs
+            <span class="launch-sub" id="linkedin-preview">loading skills…</span>
+          </div>
+        </div>
+        <span>↗</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── APPLIED TRACKER ── -->
+  <div class="applied-wrap" id="applied-wrap">
+    <div class="applied-hdr" onclick="toggleApplied()">
+      <div class="applied-hdr-left">
+        ✅ Applied Jobs
+        <span class="badge" id="applied-badge">0</span>
+      </div>
+      <span class="applied-toggle" id="applied-toggle">▼</span>
+    </div>
+    <div class="applied-body" id="applied-body">
+      <!-- Log form -->
+      <div class="log-form">
+        <p>Log a job you just applied to — synced across all your devices via Firebase:</p>
+        <div class="log-fields">
+          <input  type="text" id="log-title"    placeholder="Job title" />
+          <input  type="text" id="log-company"  placeholder="Company" />
+          <select id="log-platform">
+            <option value="naukri">Naukri</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="other">Other</option>
+          </select>
+          <button class="btn-log" onclick="logApplied()">+ Log it</button>
+        </div>
+      </div>
+      <!-- List -->
+      <div id="applied-list">
+        <div class="empty-msg">No applications logged yet ☝️ Add one above</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════
+const S = {
+  tab:   'naukri',
+  days:  3,
+  exp:   true,
+  loc:   true,
+  skills:       [],
+  activeSkills: [],
+  cvName: null
+};
+
+let applied  = [];          // live array, fed from Firebase or memory
+let fbOk     = false;       // Firebase connected and configured
+let deviceId = localStorage.getItem('jr_did') || ('d' + Math.random().toString(36).slice(2,9));
+localStorage.setItem('jr_did', deviceId);
+
+// ══════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════
+function boot() {
+  loadLocal();
+  setupDrop();
+  renderStats();
+  // Always show applied section immediately
+  document.getElementById('applied-wrap').style.display = 'block';
+  if (S.skills.length) { renderTags(); updateQ(); showCVLoaded(); }
+  document.addEventListener('firebase-ready', onFbReady);
+  // Fallback: if Firebase never fires
+  setTimeout(() => { if (!fbOk) setSyncErr('offline'); }, 5000);
+  // Prune every minute in-tab
+  setInterval(pruneExpired, 60000);
+}
+
+// ══════════════════════════════════════════════════
+//  LOCAL STORAGE  (CV + settings only)
+// ══════════════════════════════════════════════════
+function loadLocal() {
+  try {
+    const d = localStorage.getItem('jr_state');
+    if (d) Object.assign(S, JSON.parse(d));
+    // restore filter UI
+    document.querySelectorAll('.fchip').forEach(c => {
+      if (c.dataset.exp) c.classList.toggle('on', S.exp);
+      if (c.dataset.loc) c.classList.toggle('on', S.loc);
+    });
+  } catch(e) {}
+}
+function saveLocal() {
+  localStorage.setItem('jr_state', JSON.stringify(S));
+}
+
+// ══════════════════════════════════════════════════
+//  FIREBASE
+// ══════════════════════════════════════════════════
+function onFbReady() {
+  if (!window._fbConfigured) {
+    setSyncErr('not configured');
+    document.getElementById('fb-alert').classList.remove('hidden');
+    // fall back to memory-only mode
+    renderApplied();
+    return;
+  }
+  document.getElementById('fb-alert').classList.add('hidden');
+  setSyncBusy('connecting…');
+  try {
+    const jobsRef = window._dbRef(window._db, 'jobradar/applied');
+    window._dbOn(jobsRef, snap => {
+      const raw = snap.val() || {};
+      const now = Date.now();
+      applied = Object.entries(raw)
+        .map(([id, j]) => ({ id, ...j }))
+        .filter(j => j.expires > now)
+        .sort((a, b) => b.appliedAt - a.appliedAt);
+      // clean expired from DB silently
+      Object.entries(raw).forEach(([id, j]) => {
+        if (j.expires <= now) fbDel(id);
+      });
+      fbOk = true;
+      setSyncOk('synced ✓');
+      renderApplied();
+      renderStats();
+    });
+  } catch(e) {
+    setSyncErr('listener error');
+    renderApplied();
+  }
+}
+
+function fbSave(job) {
+  if (!fbOk) return;          // memory-only fallback handled by caller
+  setSyncBusy('saving…');
+  window._dbSet(window._dbRef(window._db, `jobradar/applied/${job.id}`), job)
+    .then(() => setSyncOk('saved ✓'))
+    .catch(() => setSyncErr('save failed'));
+}
+function fbDel(id) {
+  if (!fbOk) return;
+  window._dbRem(window._dbRef(window._db, `jobradar/applied/${id}`))
+    .catch(() => {});
+}
+
+// sync UI
+function setSyncOk(t)   { setSyncPill('ok',  false, t); }
+function setSyncBusy(t) { setSyncPill('busy', true, t); }
+function setSyncErr(t)  { setSyncPill('err',  false, t); }
+function setSyncPill(cls, spin, lbl) {
+  const p   = document.getElementById('sync-pill');
+  const pip = p.querySelector('.sync-pip');
+  const l   = document.getElementById('sync-lbl');
+  p.className   = 'sync-pill ' + cls;
+  pip.className = 'sync-pip' + (spin ? ' spin' : '');
+  l.textContent = lbl;
+}
+
+// ══════════════════════════════════════════════════
+//  CV UPLOAD
+// ══════════════════════════════════════════════════
+function setupDrop() {
+  const dz = document.getElementById('dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    if (e.dataTransfer.files[0]) readCVFix(e.dataTransfer.files[0]);
+  });
+  document.getElementById('cv-input').onchange = function() {
+    if (this.files[0]) readCVFix(this.files[0]);
+  };
+}
+
+function readCVFix(file) {
+  S.cvName = file.name;
+  toast('Reading CV…');
+  const r = new FileReader();
+  r.onload = e => {
+    const skills = extractSkills(e.target.result);
+    S.skills = skills; S.activeSkills = [...skills];
+    saveLocal(); renderTags(); updateQ(); showCVLoaded(); renderStats();
+    toast(`✅ ${skills.length} skills detected from your CV`, 'ok');
+  };
+  r.readAsText(file);
+}
+
+const SKILLS_DB = [
+  'AWS','Azure','GCP','Terraform','Ansible','Puppet','Chef','Kubernetes','Docker',
+  'Jenkins','GitLab CI','GitHub Actions','CircleCI','ArgoCD','Helm','Prometheus',
+  'Grafana','ECS','EKS','Fargate','Lambda','EC2','S3','RDS','Aurora','DynamoDB',
+  'CloudFormation','CDK','Pulumi','Vagrant','Packer','Consul','Vault',
+  'GuardDuty','WAF','IAM','VPC','Route53','CloudFront','Elasticsearch',
+  'Python','Bash','Shell','PowerShell','Golang','Ruby','Java','JavaScript',
+  'TypeScript','Node.js','Groovy','YAML','JSON','HCL',
+  'Nginx','Apache','HAProxy','DNS','SSL','TLS','DevSecOps',
+  'CI/CD','DevOps','SRE','Agile','Scrum','GitOps','IaC','Microservices','Serverless',
+  'Observability','Monitoring','Logging','Git','Jira','DataDog','New Relic','Splunk','ELK',
+  'Linux','Ubuntu','CentOS','RHEL','MySQL','PostgreSQL','MongoDB','Redis','Kafka','RabbitMQ'
+];
+function extractSkills(text) {
+  const up = text.toUpperCase();
+  const found = SKILLS_DB.filter(s => new RegExp('\\b' + s.replace(/[.+]/g,'\\$&').toUpperCase() + '\\b').test(up));
+  return found.length >= 3 ? found : ['DevOps','AWS','CI/CD','Linux','Docker','Terraform','Kubernetes'];
+}
+
+function showCVLoaded() {
+  document.getElementById('cv-card').classList.add('loaded');
+  document.getElementById('cv-fname').textContent = '✅ ' + (S.cvName || 'CV loaded');
+  document.getElementById('dropzone').style.display = 'none';
+  document.getElementById('skills-wrap').style.display = 'block';
+}
+function resetCV() {
+  if (!confirm('Clear CV and skills from this device?')) return;
+  const keep = { tab: S.tab, days: S.days, exp: S.exp, loc: S.loc };
+  Object.assign(S, keep, { skills:[], activeSkills:[], cvName:null });
+  saveLocal(); location.reload();
+}
+
+// ══════════════════════════════════════════════════
+//  SKILL TAGS
+// ══════════════════════════════════════════════════
+function renderTags() {
+  const el = document.getElementById('tags');
+  el.innerHTML = '';
+  S.skills.forEach(sk => {
+    const b = document.createElement('button');
+    b.className = 'tag' + (S.activeSkills.includes(sk) ? ' on' : '');
+    b.textContent = sk;
+    b.onclick = () => toggleTag(sk, b);
+    el.appendChild(b);
+  });
+  document.getElementById('skills-wrap').style.display = 'block';
+  document.getElementById('stat-skills').textContent = S.activeSkills.length;
+}
+function toggleTag(sk, el) {
+  el.classList.add('ping'); setTimeout(() => el.classList.remove('ping'), 350);
+  if (S.activeSkills.includes(sk)) { S.activeSkills = S.activeSkills.filter(s => s !== sk); el.classList.remove('on'); }
+  else                              { S.activeSkills.push(sk); el.classList.add('on'); }
+  updateQ(); saveLocal();
+  document.getElementById('stat-skills').textContent = S.activeSkills.length;
+}
+function openSkillEditor() {
+  const cur = prompt('Edit your skills (comma-separated):\n\n' + S.skills.join(', '));
+  if (cur === null) return;
+  const skills = cur.split(',').map(s => s.trim()).filter(Boolean);
+  if (skills.length) { S.skills = skills; S.activeSkills = [...skills]; saveLocal(); renderTags(); updateQ(); toast('Skills updated ✅', 'ok'); }
+}
+
+// ══════════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════════
+function getQ() {
+  return document.getElementById('q').value.trim() || S.activeSkills.slice(0,6).join(' ') || 'DevOps AWS';
+}
+function updateQ() {
+  document.getElementById('q').value = S.activeSkills.slice(0,6).join(' ');
+  refreshPreviews();
+}
+function refreshPreviews() {
+  const q  = getQ();
+  const p3 = q.split(' ').slice(0,3).join('+');
+  const dl = { 3:'3 days', 7:'7 days', 14:'2 weeks' }[S.days] || '3 days';
+  document.getElementById('naukri-preview').textContent   = `${p3} · Past ${dl} · India`;
+  document.getElementById('linkedin-preview').textContent = `${p3} · Past ${dl} · India`;
+}
+
+function buildNaukri(q) {
+  const slug = q.replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  const age  = { 3:'3', 7:'7', 14:'15' }[S.days] || '3';
+  const exp  = S.exp ? '&experience=2' : '';
+  return `https://www.naukri.com/${slug}-jobs?jobAge=${age}${exp}`;
+}
+function buildLinkedIn(q) {
+  const kw   = encodeURIComponent(q);
+  const tpr  = { 3:'r259200', 7:'r604800', 14:'r1209600' }[S.days] || 'r259200';
+  const loc  = S.loc ? '&location=India&geoId=102713980' : '';
+  const exp  = S.exp ? '&f_E=2,3,4' : '';
+  return `https://www.linkedin.com/jobs/search/?keywords=${kw}${loc}&f_TPR=${tpr}${exp}`;
+}
+
+function openNaukri()   { ping(); window.open(buildNaukri(getQ()),   '_blank'); toast('🟠 Opening Naukri…'); }
+function openLinkedIn() { ping(); window.open(buildLinkedIn(getQ()), '_blank'); toast('🔵 Opening LinkedIn…'); }
+function doSearch()     { S.tab === 'naukri' ? openNaukri() : openLinkedIn(); }
+
+function ping() {
+  document.querySelectorAll('.tag.on').forEach((el, i) =>
+    setTimeout(() => { el.classList.add('ping'); setTimeout(() => el.classList.remove('ping'), 350); }, i * 55)
+  );
+}
+
+// ══════════════════════════════════════════════════
+//  FILTER CONTROLS
+// ══════════════════════════════════════════════════
+function setTab(t) {
+  S.tab = t; saveLocal();
+  document.getElementById('tab-naukri').classList.toggle('on', t === 'naukri');
+  document.getElementById('tab-linkedin').classList.toggle('on', t === 'linkedin');
+  refreshPreviews();
+}
+function setDays(d, el) {
+  S.days = d; saveLocal();
+  document.querySelectorAll('.fchip:not([data-exp]):not([data-loc])').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('stat-days').textContent = d + 'd';
+  refreshPreviews();
+}
+function toggleExp(el) {
+  S.exp = !S.exp; el.classList.toggle('on', S.exp); saveLocal(); refreshPreviews();
+}
+function toggleLoc(el) {
+  S.loc = !S.loc; el.classList.toggle('on', S.loc); saveLocal(); refreshPreviews();
+}
+
+// ══════════════════════════════════════════════════
+//  APPLIED TRACKER
+// ══════════════════════════════════════════════════
+function logApplied() {
+  const title    = document.getElementById('log-title').value.trim();
+  const company  = document.getElementById('log-company').value.trim();
+  const platform = document.getElementById('log-platform').value;
+  if (!title || !company) { toast('Please enter job title and company', 'warn'); return; }
+
+  const job = {
+    id:        'j' + Date.now() + Math.random().toString(36).slice(2,5),
+    title, company, platform, deviceId,
+    appliedAt: Date.now(),
+    expires:   Date.now() + 86400000   // 24 hours
+  };
+
+  if (fbOk) {
+    fbSave(job);   // Firebase onValue will update `applied` array automatically
+  } else {
+    applied.unshift(job);  // memory-only fallback
+    renderApplied();
+    renderStats();
+  }
+
+  document.getElementById('log-title').value   = '';
+  document.getElementById('log-company').value = '';
+  toast(`✅ Logged: ${title} @ ${company}`, 'ok');
+}
+
+function removeApplied(id) {
+  if (fbOk) {
+    fbDel(id);   // Firebase listener will remove it from `applied` array
+  } else {
+    applied = applied.filter(j => j.id !== id);
+    renderApplied();
+    renderStats();
+  }
+  toast('Removed from list');
+}
+
+function renderApplied() {
+  const list  = document.getElementById('applied-list');
+  const badge = document.getElementById('applied-badge');
+  badge.textContent = applied.length;
+
+  if (!applied.length) {
+    list.innerHTML = '<div class="empty-msg">No applications logged yet ☝️ Add one above</div>';
+    return;
+  }
+  list.innerHTML = '';
+  applied.forEach(j => {
+    const hrs  = Math.max(0, Math.ceil((j.expires - Date.now()) / 3600000));
+    const mine = j.deviceId === deviceId;
+    const div  = document.createElement('div');
+    div.className = 'job-row fade';
+    div.innerHTML = `
+      <div class="job-row-info">
+        <strong>${esc(j.title)}</strong>
+        <span>${esc(j.company)} · ${j.platform}</span>
+      </div>
+      <div class="job-row-right">
+        <span class="job-row-timer">🕒 ${hrs}h left</span>
+        <span class="job-row-src">${mine ? '📱 this device' : '💻 other device'}</span>
+      </div>
+      <button class="btn-del" onclick="removeApplied('${j.id}')" title="Remove">✕</button>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function pruneExpired() {
+  const now    = Date.now();
+  const before = applied.length;
+  applied = applied.filter(j => j.expires > now);
+  if (applied.length !== before) { renderApplied(); renderStats(); }
+}
+
+function toggleApplied() {
+  const body   = document.getElementById('applied-body');
+  const toggle = document.getElementById('applied-toggle');
+  const open   = !body.classList.contains('collapsed');
+  body.classList.toggle('collapsed', open);
+  toggle.textContent = open ? '▶' : '▼';
+}
+
+// ══════════════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════════════
+function renderStats() {
+  document.getElementById('stat-skills').textContent  = S.activeSkills.length || S.skills.length;
+  document.getElementById('stat-applied').textContent = applied.length;
+  document.getElementById('stat-days').textContent    = S.days + 'd';
+}
+
+// ══════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+let _toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast up' + (type === 'ok' ? ' is-ok' : '') + (type === 'warn' ? ' is-warn' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = 'toast'; }, 3200);
+}
+
+// ══════════════════════════════════════════════════
+//  SERVICE WORKER
+// ══════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ══════════════════════════════════════════════════
+//  START
+// ══════════════════════════════════════════════════
+boot();
+refreshPreviews();
+</script>
+</body>
+</html>
