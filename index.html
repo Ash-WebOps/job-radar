@@ -530,37 +530,62 @@ function saveLocal() {
 //  FIREBASE
 // ══════════════════════════════════════════════════
 function onFbReady() {
-  if (!window._fbConfigured) {
-    setSyncErr('not configured');
-    document.getElementById('fb-alert').classList.remove('hidden');
-    // fall back to memory-only mode
-    renderApplied();
-    return;
-  }
-  document.getElementById('fb-alert').classList.add('hidden');
-  setSyncBusy('connecting…');
-  try {
-    const jobsRef = window._dbRef(window._db, 'jobradar/applied');
-    window._dbOn(jobsRef, snap => {
-      const raw = snap.val() || {};
-      const now = Date.now();
-      applied = Object.entries(raw)
-        .map(([id, j]) => ({ id, ...j }))
-        .filter(j => j.expires > now)
-        .sort((a, b) => b.appliedAt - a.appliedAt);
-      // clean expired from DB silently
-      Object.entries(raw).forEach(([id, j]) => {
-        if (j.expires <= now) fbDel(id);
-      });
-      fbOk = true;
-      setSyncOk('synced ✓');
+  console.log('[JobRadar] firebase-ready fired');
+  console.log('[JobRadar] _fbConfigured:', window._fbConfigured);
+  console.log('[JobRadar] _db exists:', !!window._db);
+
+  // Give module script an extra tick to set window vars
+  setTimeout(() => {
+    console.log('[JobRadar] After tick — _fbConfigured:', window._fbConfigured);
+
+    if (!window._fbConfigured || !window._db) {
+      console.warn('[JobRadar] Firebase not configured or db missing');
+      setSyncErr('not configured');
+      document.getElementById('fb-alert').classList.remove('hidden');
       renderApplied();
-      renderStats();
-    });
-  } catch(e) {
-    setSyncErr('listener error');
-    renderApplied();
-  }
+      return;
+    }
+
+    document.getElementById('fb-alert').classList.add('hidden');
+    setSyncBusy('connecting…');
+
+    try {
+      const jobsRef = window._dbRef(window._db, 'jobradar/applied');
+      console.log('[JobRadar] Attaching onValue listener to jobradar/applied');
+
+      window._dbOn(jobsRef, snap => {
+        console.log('[JobRadar] onValue fired, data:', snap.val());
+        const raw = snap.val() || {};
+        const now = Date.now();
+        applied = Object.entries(raw)
+          .map(([id, j]) => ({ id, ...j }))
+          .filter(j => j.expires > now)
+          .sort((a, b) => b.appliedAt - a.appliedAt);
+        // clean expired from DB silently
+        Object.entries(raw).forEach(([id, j]) => {
+          if (j.expires <= now) fbDel(id);
+        });
+        fbOk = true;
+        setSyncOk('synced ✓');
+        document.getElementById('fb-alert').classList.add('hidden');
+        renderApplied();
+        renderStats();
+      }, err => {
+        // onValue error callback — catches permission denied etc.
+        console.error('[JobRadar] Firebase onValue error:', err.code, err.message);
+        if (err.code === 'PERMISSION_DENIED') {
+          setSyncErr('permission denied — fix DB rules');
+        } else {
+          setSyncErr('DB error: ' + err.code);
+        }
+        renderApplied();
+      });
+    } catch(e) {
+      console.error('[JobRadar] Firebase catch error:', e);
+      setSyncErr('error: ' + e.message);
+      renderApplied();
+    }
+  }, 100);
 }
 
 function fbSave(job) {
