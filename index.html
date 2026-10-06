@@ -6,8 +6,8 @@
   <title>JobRadar – Smart Job Hunt Dashboard</title>
   <meta name="description" content="Your personal job hunt dashboard powered by your CV" />
   <meta name="theme-color" content="#0A0F1E" />
-  <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="manifest" href="/job-radar/manifest.json" />
+  <link rel="apple-touch-icon" href="/job-radar/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
@@ -20,15 +20,15 @@
     import { getDatabase, ref, set, remove, onValue }
                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBXZaCYWf36CKhonc_xqnhnKQ6F3fpLwE0",
-  authDomain: "my-naukri-automation.firebaseapp.com",
-  databaseURL: "https://my-naukri-automation-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "my-naukri-automation",
-  storageBucket: "my-naukri-automation.firebasestorage.app",
-  messagingSenderId: "262381060835",
-  appId: "1:262381060835:web:aae2b130caee63015b7bd6"
-};
+    const firebaseConfig = {
+      apiKey:            "PASTE_YOUR_API_KEY",
+      authDomain:        "PASTE_YOUR_AUTH_DOMAIN",
+      databaseURL:       "PASTE_YOUR_DATABASE_URL",
+      projectId:         "PASTE_YOUR_PROJECT_ID",
+      storageBucket:     "PASTE_YOUR_STORAGE_BUCKET",
+      messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID",
+      appId:             "PASTE_YOUR_APP_ID"
+    };
 
     // Detect if user has pasted real config yet
     const configured = !Object.values(firebaseConfig).some(v => v.startsWith('PASTE_'));
@@ -894,7 +894,7 @@ function toast(msg, type = '') {
 //  SERVICE WORKER
 // ══════════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('/job-radar/sw.js', { scope: '/job-radar/' }).catch(e => console.warn('SW reg failed:', e));
 }
 
 // ══════════════════════════════════════════════════
